@@ -621,3 +621,634 @@ class Explorer:
     def in_magnet_range(self, entity):
         if self.active_powerups["magnet"] <= 0:
             return False
+        
+        distance = math.sqrt((self.x - entity.x)**2 + (self.y - entity.y)**2)
+        return distance < self.magnet_radius
+
+class Treasure:
+    def __init__(self, x, y, treasure_type="normal"):
+        self.x = x
+        self.y = y
+        self.size = 15
+        self.collected = False
+        self.animation_offset = random.random() * math.pi * 2
+        self.treasure_type = treasure_type  # "normal", "special", "rare"
+        self.value = {
+            "normal": 1,
+            "special": 3,
+            "rare": 5
+        }.get(treasure_type, 1)
+        
+        # Color by type
+        self.color = {
+            "normal": GOLD,
+            "special": (255, 128, 0),  # Orange
+            "rare": (138, 43, 226)   # Purple
+        }.get(treasure_type, GOLD)
+        
+    def draw(self, camera_x, camera_y, time_passed):
+        if not self.collected:
+            screen_x = self.x - camera_x
+            screen_y = self.y - camera_y
+            
+            # Only draw if on screen
+            if -self.size <= screen_x <= WIDTH + self.size and -self.size <= screen_y <= HEIGHT + self.size:
+                # Floating animation
+                float_offset = math.sin(time_passed * 0.005 + self.animation_offset) * 5
+                
+                # Draw chest with slight 3D effect
+                chest_width = self.size * 1.2
+                chest_height = self.size * 0.8
+                
+                # Main body of chest
+                pygame.draw.rect(screen, self.color, 
+                              (screen_x - chest_width//2, 
+                               screen_y - chest_height//2 + float_offset, 
+                               chest_width, chest_height))
+                
+                # Chest top
+                pygame.draw.rect(screen, (self.color[0]//2, self.color[1]//2, self.color[2]//2), 
+                              (screen_x - chest_width//2, 
+                               screen_y - chest_height//2 + float_offset - chest_height//4, 
+                               chest_width, chest_height//4))
+                
+                # Chest lock
+                pygame.draw.rect(screen, (200, 200, 200), 
+                              (screen_x - 5, 
+                               screen_y - 5 + float_offset, 
+                               10, 10))
+                
+                # Sparkling effect
+                if random.random() < 0.1:
+                    sparkle_x = screen_x + random.randint(-self.size, self.size)
+                    sparkle_y = screen_y + random.randint(-self.size, self.size) + float_offset
+                    pygame.draw.line(screen, WHITE, 
+                                  (sparkle_x-2, sparkle_y), 
+                                  (sparkle_x+2, sparkle_y), 2)
+                    pygame.draw.line(screen, WHITE, 
+                                  (sparkle_x, sparkle_y-2), 
+                                  (sparkle_x, sparkle_y+2), 2)
+                
+                # Show value
+                if self.treasure_type != "normal":
+                    value_text = font_tiny.render(str(self.value), True, WHITE)
+                    screen.blit(value_text, (screen_x + self.size, screen_y - self.size))
+
+class Key:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.size = 12
+        self.collected = False
+        self.animation_offset = random.random() * math.pi * 2
+    
+    def draw(self, camera_x, camera_y, time_passed):
+        if not self.collected:
+            screen_x = self.x - camera_x
+            screen_y = self.y - camera_y
+            
+            # Only draw if on screen
+            if -self.size <= screen_x <= WIDTH + self.size and -self.size <= screen_y <= HEIGHT + self.size:
+                # Floating animation
+                float_offset = math.sin(time_passed * 0.005 + self.animation_offset) * 5
+                
+                # Draw key
+                # Key head
+                pygame.draw.circle(screen, GOLD, (screen_x, screen_y + float_offset), self.size//2)
+                # Key stem
+                pygame.draw.rect(screen, GOLD, 
+                               (screen_x, screen_y + float_offset, 
+                                self.size//4, self.size*1.5))
+                # Key teeth
+                pygame.draw.rect(screen, GOLD, 
+                               (screen_x + self.size//4, screen_y + float_offset + self.size, 
+                                self.size//2, self.size//4))
+                pygame.draw.rect(screen, GOLD, 
+                               (screen_x + self.size//4, screen_y + float_offset + self.size*1.25, 
+                                self.size//2, self.size//4))
+                
+                # Sparkling effect
+                if random.random() < 0.1:
+                    sparkle_x = screen_x + random.randint(-self.size, self.size)
+                    sparkle_y = screen_y + random.randint(-self.size, self.size) + float_offset
+                    pygame.draw.line(screen, WHITE, 
+                                  (sparkle_x-2, sparkle_y), 
+                                  (sparkle_x+2, sparkle_y), 2)
+                    pygame.draw.line(screen, WHITE, 
+                                  (sparkle_x, sparkle_y-2), 
+                                  (sparkle_x, sparkle_y+2), 2)
+
+class Coin:
+    def __init__(self, x, y, value=1):
+        self.x = x
+        self.y = y
+        self.size = 10
+        self.collected = False
+        self.animation_offset = random.random() * math.pi * 2
+        self.value = value
+        self.color = GOLD if value == 1 else ORANGE if value == 5 else PURPLE
+    
+    def draw(self, camera_x, camera_y, time_passed):
+        if not self.collected:
+            screen_x = self.x - camera_x
+            screen_y = self.y - camera_y
+            
+            # Only draw if on screen
+            if -self.size <= screen_x <= WIDTH + self.size and -self.size <= screen_y <= HEIGHT + self.size:
+                # Floating animation
+                float_offset = math.sin(time_passed * 0.005 + self.animation_offset) * 3
+                
+                # Draw coin with 3D effect (oval that changes with time)
+                width_factor = abs(math.sin(time_passed * 0.01 + self.animation_offset)) * 0.5 + 0.5
+                pygame.draw.ellipse(screen, self.color, 
+                                  (screen_x - self.size * width_factor, 
+                                   screen_y - self.size + float_offset, 
+                                   self.size * 2 * width_factor, 
+                                   self.size * 2))
+                
+                # Coin edge highlight
+                pygame.draw.ellipse(screen, (255, 255, 200), 
+                                  (screen_x - self.size * width_factor + 2, 
+                                   screen_y - self.size + float_offset + 2, 
+                                   self.size * 2 * width_factor - 4, 
+                                   self.size * 2 - 4), 1)
+                
+                # Show value for special coins
+                if self.value > 1:
+                    value_text = font_tiny.render(str(self.value), True, WHITE)
+                    screen.blit(value_text, (screen_x - value_text.get_width()//2, 
+                                         screen_y - self.size//2 + float_offset))
+
+class Enemy:
+    def __init__(self, x, y, enemy_type="ghost"):
+        self.x = x
+        self.y = y
+        self.size = 18
+        self.speed = random.uniform(1, 2.5)
+        self.enemy_type = enemy_type
+        self.direction = random.choice(["up", "down", "left", "right"])
+        self.direction_change_time = 0
+        self.frame = 0
+        self.animation_speed = 200
+        self.last_frame_time = 0
+        self.aggro_range = 250
+        self.color = {
+            "ghost": (200, 200, 255),
+            "goblin": (100, 200, 100),
+            "slime": (100, 200, 255)
+        }.get(enemy_type, (200, 200, 255))
+        
+    def draw(self, camera_x, camera_y, time_passed):
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+        
+        # Only draw if on screen
+        if -self.size*2 <= screen_x <= WIDTH + self.size*2 and -self.size*2 <= screen_y <= HEIGHT + self.size*2:
+            # Handle different enemy types
+            if self.enemy_type == "ghost":
+                # Ghost body
+                ghost_height = self.size * 1.5
+                # Base body with ripple effect
+                wave = math.sin(time_passed * 0.01) * 3
+                
+                # Translucent effect
+                ghost_surface = pygame.Surface((self.size*2 + abs(wave)*2, ghost_height*1.5), pygame.SRCALPHA)
+                
+                # Main ghost body
+                pygame.draw.ellipse(ghost_surface, (*self.color, 180), 
+                                  (0, 0, self.size*2, self.size*2))
+                
+                # Wavy bottom
+                for i in range(3):
+                    offset = i * (self.size*2 // 3)
+                    bottom_wave = math.sin(time_passed * 0.01 + i) * 5
+                    pygame.draw.ellipse(ghost_surface, (*self.color, 150), 
+                                     (offset, self.size + bottom_wave, 
+                                      self.size*2//3, ghost_height - self.size))
+                
+                # Eyes
+                eye_offset = 5 if self.frame % 2 == 0 else 0
+                pygame.draw.circle(ghost_surface, (0, 0, 0, 200), (self.size//2, self.size//2 + eye_offset), 4)
+                pygame.draw.circle(ghost_surface, (0, 0, 0, 200), (self.size*3//2, self.size//2 + eye_offset), 4)
+                
+                screen.blit(ghost_surface, (screen_x - self.size - abs(wave), screen_y - self.size))
+                
+            elif self.enemy_type == "goblin":
+                # Goblin body
+                pygame.draw.circle(screen, self.color, (screen_x, screen_y), self.size)
+                
+                # Face direction
+                face_offset = 8
+                if self.direction == "left":
+                    face_x = screen_x - face_offset
+                elif self.direction == "right":
+                    face_x = screen_x + face_offset
+                else:
+                    face_x = screen_x
+                
+                if self.direction == "up":
+                    face_y = screen_y - face_offset
+                elif self.direction == "down":
+                    face_y = screen_y + face_offset
+                else:
+                    face_y = screen_y
+                
+                # Face
+                pygame.draw.circle(screen, (150, 100, 50), (face_x, face_y), self.size//2)
+                
+                # Eyes
+                pygame.draw.circle(screen, (255, 0, 0), (face_x - 3, face_y - 2), 2)
+                pygame.draw.circle(screen, (255, 0, 0), (face_x + 3, face_y - 2), 2)
+                
+                # Goblin ears
+                ear_size = self.size // 3
+                pygame.draw.ellipse(screen, self.color, (face_x - self.size//2 - ear_size, face_y - ear_size, ear_size*2, ear_size))
+                pygame.draw.ellipse(screen, self.color, (face_x + self.size//2 - ear_size, face_y - ear_size, ear_size*2, ear_size))
+                
+            elif self.enemy_type == "slime":
+                # Slime body with bounce animation
+                bounce = abs(math.sin(time_passed * 0.008)) * 10
+                slime_height = self.size + bounce
+                
+                # Base slime
+                pygame.draw.ellipse(screen, self.color, 
+                                  (screen_x - self.size, 
+                                   screen_y - slime_height//2, 
+                                   self.size * 2, 
+                                   slime_height))
+                
+                # Eyes
+                eye_y = screen_y - slime_height//4
+                pygame.draw.circle(screen, (0, 0, 0), (screen_x - 5, eye_y), 3)
+                pygame.draw.circle(screen, (0, 0, 0), (screen_x + 5, eye_y), 3)
+                
+                # Slime drips
+                if random.random() < 0.1:
+                    drip_x = screen_x + random.randint(-self.size + 3, self.size - 3)
+                    pygame.draw.line(screen, self.color, 
+                                  (drip_x, screen_y + slime_height//2), 
+                                  (drip_x, screen_y + slime_height//2 + random.randint(3, 8)), 2)
+    
+    def update(self, game_map, player, current_time):
+        # Update animation
+        if current_time - self.last_frame_time > self.animation_speed:
+            self.frame = (self.frame + 1) % 4
+            self.last_frame_time = current_time
+        
+        # Calculate distance to player
+        dist_to_player = math.sqrt((self.x - player.x)**2 + (self.y - player.y)**2)
+        
+        # If player has shield, enemies stay away
+        if player.active_powerups["shield"] > 0 and dist_to_player < self.aggro_range:
+            # Run away from player
+            angle = math.atan2(self.y - player.y, self.x - player.x)
+            new_x = self.x + math.cos(angle) * self.speed
+            new_y = self.y + math.sin(angle) * self.speed
+            
+            # Update direction based on movement
+            if abs(math.cos(angle)) > abs(math.sin(angle)):
+                self.direction = "right" if math.cos(angle) > 0 else "left"
+            else:
+                self.direction = "down" if math.sin(angle) > 0 else "up"
+                
+        # Chase player if in range
+        elif dist_to_player < self.aggro_range:
+            angle = math.atan2(player.y - self.y, player.x - self.x)
+            new_x = self.x + math.cos(angle) * self.speed
+            new_y = self.y + math.sin(angle) * self.speed
+            
+            # Update direction based on movement
+            if abs(math.cos(angle)) > abs(math.sin(angle)):
+                self.direction = "right" if math.cos(angle) > 0 else "left"
+            else:
+                self.direction = "down" if math.sin(angle) > 0 else "up"
+                
+        else:
+            # Random movement
+            if current_time - self.direction_change_time > 2000:  # Change direction every 2 seconds
+                self.direction = random.choice(["up", "down", "left", "right"])
+                self.direction_change_time = current_time
+            
+            if self.direction == "up":
+                new_y = self.y - self.speed
+                new_x = self.x
+            elif self.direction == "down":
+                new_y = self.y + self.speed
+                new_x = self.x
+            elif self.direction == "left":
+                new_x = self.x - self.speed
+                new_y = self.y
+            else:  # right
+                new_x = self.x + self.speed
+                new_y = self.y
+        
+        # Check if new position is valid (not on rocks)
+        tile_size = game_map.tile_size
+        tile_x = int(new_x // tile_size)
+        tile_y = int(new_y // tile_size)
+        
+        map_width_tiles = game_map.width // tile_size
+        map_height_tiles = game_map.height // tile_size
+        
+        if 0 <= tile_x < map_width_tiles and 0 <= tile_y < map_height_tiles:
+            tile_index = tile_y * map_width_tiles + tile_x
+            
+            if 0 <= tile_index < len(game_map.tiles):
+                tile_type = game_map.tiles[tile_index].type
+                
+                # Different enemies have different movement restrictions
+                if self.enemy_type == "ghost":
+                    # Ghosts can go anywhere except water
+                    if tile_type != "water":
+                        self.x, self.y = new_x, new_y
+                elif self.enemy_type == "slime":
+                    # Slimes prefer water and avoid rocks
+                    if tile_type != "rock":
+                        self.x, self.y = new_x, new_y
+                        # Slimes are faster in water
+                        if tile_type == "water":
+                            self.x += math.cos(math.atan2(new_y - self.y, new_x - self.x)) * self.speed * 0.5
+                            self.y += math.sin(math.atan2(new_y - self.y, new_x - self.x)) * self.speed * 0.5
+                else:  # goblin and others
+                    # Normal enemies avoid water and rocks
+                    if tile_type not in ["rock", "water"]:
+                        self.x, self.y = new_x, new_y
+        
+        # Keep within map bounds
+        self.x = max(self.size, min(self.x, game_map.width - self.size))
+        self.y = max(self.size, min(self.y, game_map.height - self.size))
+
+class GameSystem:
+    def __init__(self):
+        self.state = MENU
+        self.difficulty = 1
+        self.level = 1
+        self.score = 0
+        self.high_score = 0
+        self.game_map = None
+        self.player = None
+        self.treasures = []
+        self.keys = []
+        self.coins = []
+        self.powerups = []
+        self.enemies = []
+        self.camera_x = 0
+        self.camera_y = 0
+        self.challenges = []
+        self.current_challenge = None
+        self.challenge_timer = 0
+        self.challenge_result = None
+        self.transition_alpha = 255
+        self.fade_direction = -1  # -1 for fade in, 1 for fade out
+        self.shop_items = []
+        self.game_time = 0
+        self.level_start_time = 0
+        self.level_time_limit = 300  # 5 minutes in seconds
+        self.paused = False
+        self.tutorial_page = 0
+        self.story_page = 0
+        self.player_name = ""
+        self.input_active = False
+        self.show_map = False
+        self.map_zoom = 0.2
+        self.particles = []
+        self.messages = []  # For in-game notifications
+        self.message_fade = 255
+        self.completion_stats = {
+            "treasures_found": 0,
+            "keys_collected": 0,
+            "coins_collected": 0,
+            "powerups_used": 0,
+            "enemies_avoided": 0,
+            "distance_traveled": 0,
+            "challenges_completed": 0
+        }
+        self.initialize_shop()
+        
+    def initialize_shop(self):
+        self.shop_items = [
+            {"name": "Extra Heart", "description": "Increases max health by 1", "cost": 50, "effect": "health"},
+            {"name": "Speed Boost", "description": "Permanent speed increase", "cost": 40, "effect": "speed"},
+            {"name": "Key", "description": "Get an extra key", "cost": 30, "effect": "key"},
+            {"name": "Magnet", "description": "Active magnet power-up", "cost": 25, "effect": "magnet"},
+            {"name": "Shield", "description": "Active shield power-up", "cost": 35, "effect": "shield"}
+        ]
+        
+    def add_message(self, text, color=WHITE):
+        self.messages.append({"text": text, "color": color, "time": 180})  # Show for 3 seconds (60 fps * 3)
+        
+    def update_messages(self):
+        # Update existing messages
+        for message in self.messages:
+            message["time"] -= 1
+            
+        # Remove expired messages
+        self.messages = [msg for msg in self.messages if msg["time"] > 0]
+        
+    def draw_messages(self):
+        # Draw messages at the top center of the screen
+        y_offset = 50
+        for message in self.messages:
+            # Fade out as time expires
+            alpha = min(255, message["time"] * 3)
+            color = (*message["color"][:3], alpha) if len(message["color"]) > 3 else message["color"]
+            
+            message_text = font_medium.render(message["text"], True, color)
+            screen.blit(message_text, (WIDTH//2 - message_text.get_width()//2, y_offset))
+            y_offset += 40
+    
+    def start_new_game(self):
+        # Initialize game map
+        self.game_map = Map(WIDTH, HEIGHT, 50, self.difficulty)
+        
+        # Create player at valid location
+        player_pos = self.game_map.get_valid_position(20)
+        self.player = Explorer(*player_pos)
+        
+        # Set player name if empty
+        if not self.player_name:
+            self.player_name = "Explorer"
+        self.player.name = self.player_name
+        
+        # Reset game variables
+        self.score = 0
+        self.level = 1
+        self.treasures = []
+        self.keys = []
+        self.coins = []
+        self.powerups = []
+        self.enemies = []
+        self.challenges = []
+        self.messages = []
+        self.game_time = 0
+        self.level_start_time = 0
+        self.show_map = False
+        
+        # Reset completion stats
+        for stat in self.completion_stats:
+            self.completion_stats[stat] = 0
+        
+        # Spawn initial game objects
+        self.spawn_level_objects()
+        
+        # Initialize camera position
+        self.center_camera_on_player()
+        
+        # Set game state to playing
+        self.state = PLAYING
+        
+    def spawn_level_objects(self):
+        # Clear existing objects
+        self.treasures = []
+        self.keys = []
+        self.coins = []
+        self.powerups = []
+        self.enemies = []
+        
+        # Number of objects scales with level and difficulty
+        num_treasures = 3 + self.level + self.difficulty
+        num_keys = max(2, min(num_treasures - 1, 5 + self.level // 2))
+        num_coins = 10 + self.level * 3 + self.difficulty * 2
+        num_powerups = 1 + self.level // 2
+        num_enemies = self.difficulty * 2 + self.level
+        
+        # Spawn treasures
+        for _ in range(num_treasures):
+            # Make some treasures special or rare
+            treasure_type = "normal"
+            if random.random() < 0.2:
+                treasure_type = "special"
+            elif random.random() < 0.1:
+                treasure_type = "rare"
+            
+            # Place treasure at valid position, away from player
+            treasure_pos = self.game_map.get_valid_position(15, ["water", "rock"], 
+                                                          300, (self.player.x, self.player.y))
+            self.treasures.append(Treasure(*treasure_pos, treasure_type))
+        
+        # Spawn keys
+        for _ in range(num_keys):
+            key_pos = self.game_map.get_valid_position(12, ["water", "rock"])
+            self.keys.append(Key(*key_pos))
+        
+        # Spawn coins
+        for _ in range(num_coins):
+            coin_value = 1
+            if random.random() < 0.1:
+                coin_value = 5
+            elif random.random() < 0.05:
+                coin_value = 10
+                
+            coin_pos = self.game_map.get_valid_position(10)
+            self.coins.append(Coin(*coin_pos, coin_value))
+        
+        # Spawn power-ups
+        powerup_types = ["speed", "health", "magnet", "shield"]
+        for _ in range(num_powerups):
+            powerup_type = random.choice(powerup_types)
+            powerup_pos = self.game_map.get_valid_position(15, ["water", "rock"])
+            self.powerups.append(PowerUp(*powerup_pos, powerup_type))
+        
+        # Spawn enemies
+        enemy_types = ["ghost", "goblin", "slime"]
+        for _ in range(num_enemies):
+            enemy_type = random.choice(enemy_types)
+            # Ensure enemies spawn away from player
+            enemy_pos = self.game_map.get_valid_position(18, ["rock"], 
+                                                       400, (self.player.x, self.player.y))
+            self.enemies.append(Enemy(*enemy_pos, enemy_type))
+    
+    def center_camera_on_player(self):
+        self.camera_x = self.player.x - WIDTH // 2
+        self.camera_y = self.player.y - HEIGHT // 2
+        
+        # Keep camera within map bounds
+        self.camera_x = max(0, min(self.camera_x, self.game_map.width - WIDTH))
+        self.camera_y = max(0, min(self.camera_y, self.game_map.height - HEIGHT))
+    
+    def check_collisions(self):
+        # Check treasure collisions
+        for treasure in self.treasures:
+            if not treasure.collected and self.player.collides_with(treasure):
+                if self.player.keys > 0:
+                    treasure.collected = True
+                    self.player.keys -= 1
+                    self.player.treasures += treasure.value
+                    self.score += treasure.value * 50
+                    self.completion_stats["treasures_found"] += 1
+                    play_sound('collect_treasure')
+                    self.add_message(f"Found a treasure! +{treasure.value * 50} points", GOLD)
+                else:
+                    self.add_message("Need a key to open this treasure!", WHITE)
+        
+        # Check key collisions
+        for key in self.keys:
+            if not key.collected and self.player.collides_with(key):
+                key.collected = True
+                self.player.keys += 1
+                self.score += 20
+                self.completion_stats["keys_collected"] += 1
+                play_sound('collect_key')
+                self.add_message("Found a key! +20 points", GOLD)
+        
+        # Check coin collisions
+        for coin in self.coins:
+            in_range = (self.player.active_powerups["magnet"] > 0 and 
+                       self.player.in_magnet_range(coin))
+            
+            # Move coin toward player if magnet is active
+            if in_range and not coin.collected:
+                dx = self.player.x - coin.x
+                dy = self.player.y - coin.y
+                dist = max(1, math.sqrt(dx*dx + dy*dy))
+                coin.x += (dx / dist) * 5
+                coin.y += (dy / dist) * 5
+            
+            # Check collision
+            if not coin.collected and self.player.collides_with(coin):
+                coin.collected = True
+                self.player.coins += coin.value
+                self.score += coin.value * 10
+                self.completion_stats["coins_collected"] += coin.value
+                play_sound('collect_key')  # Use key sound for coins too
+                if coin.value > 1:
+                    self.add_message(f"Collected a valuable coin! +{coin.value * 10} points", GOLD)
+        
+        # Check power-up collisions
+        for powerup in self.powerups:
+            if not powerup.collected and self.player.collides_with(powerup):
+                powerup.collected = True
+                self.player.apply_powerup(powerup.type)
+                self.score += 30
+                self.completion_stats["powerups_used"] += 1
+                play_sound('level_up')
+                self.add_message(f"Power-up: {powerup.type.title()}! +30 points", BLUE)
+        
+        # Check enemy collisions
+        for enemy in self.enemies:
+            if self.player.collides_with(enemy):
+                if self.player.active_powerups["shield"] > 0:
+                    # Shield protects from damage but gets used up
+                    self.player.active_powerups["shield"] = 0
+                    play_sound('wrong_answer')  # Use wrong answer sound for shield hit
+                    self.add_message("Shield protected you!", GOLD)
+                else:
+                    # Player takes damage
+                    self.player.hearts -= 1
+                    play_sound('wrong_answer')
+                    self.add_message("Ouch! Lost a heart!", RED)
+                    
+                    # Push player away from enemy
+                    angle = math.atan2(self.player.y - enemy.y, self.player.x - enemy.x)
+                    self.player.x += math.cos(angle) * 50
+                    self.player.y += math.sin(angle) * 50
+                    
+                    # Keep player within bounds
+                    self.player.x = max(self.player.size, min(self.player.x, self.game_map.width - self.player.size))
+                    self.player.y = max(self.player.size, min(self.player.y, self.game_map.height - self.player.size))
+                    
+                    # Check for game over
+                    if self.player.hearts <= 0:
+                        self.state = GAME_OVER
+                        play_sound('
+
