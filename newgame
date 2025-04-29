@@ -1,0 +1,623 @@
+import pygame
+import random
+import sys
+import math
+import time
+from pathlib import Path
+
+# Initialize pygame
+pygame.init()
+pygame.mixer.init()  # Initialize sound mixer
+
+# Screen dimensions
+WIDTH, HEIGHT = 800, 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Enhanced Treasure Hunter Adventure")
+
+# Colors
+BLUE = (100, 149, 237)
+GREEN = (34, 139, 34)
+BROWN = (139, 69, 19)
+GOLD = (255, 215, 0)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+SAND = (244, 215, 177)
+WATER = (65, 105, 225)
+GRASS = (124, 252, 0)
+ROCK = (128, 128, 128)
+DARK_GREEN = (0, 100, 0)
+TREE_TRUNK = (101, 67, 33)
+LIGHT_SAND = (253, 245, 230)
+DIRT = (160, 120, 90)
+RED = (255, 0, 0)
+PURPLE = (128, 0, 128)
+ORANGE = (255, 165, 0)
+DARK_BLUE = (0, 0, 139)
+
+# Game states
+MENU = 0
+DIFFICULTY_SELECT = 1
+PLAYING = 2
+CHALLENGE = 3
+GAME_OVER = 4
+SHOP = 5
+PAUSE = 6
+TUTORIAL = 7
+STORY = 8
+
+# Challenge types
+COLLECTING = 0
+SPENDING = 1
+TREASURES = 2
+SHARING = 3
+MAPPING = 4
+CODES = 5
+SECRETS = 6
+FRACTIONS = 7
+TIME = 8
+MONEY = 9
+GEOMETRY = 10
+MEASUREMENT = 11
+
+# Load sounds - create placeholder paths (you'll need to add actual sound files)
+sound_dir = Path('sounds')
+sound_dir.mkdir(exist_ok=True)
+
+# Dictionary to store sounds
+sounds = {}
+
+# Function to load sounds safely
+def load_sound(name, filename):
+    sound_path = sound_dir / filename
+    try:
+        if sound_path.exists():
+            sounds[name] = pygame.mixer.Sound(str(sound_path))
+        else:
+            print(f"Sound file not found: {sound_path}")
+    except pygame.error:
+        print(f"Unable to load sound: {sound_path}")
+
+# Load sound effects
+sound_files = {
+    'collect_key': 'key.wav',
+    'collect_treasure': 'treasure.wav',
+    'correct_answer': 'correct.wav',
+    'wrong_answer': 'wrong.wav',
+    'game_over': 'gameover.wav',
+    'level_up': 'levelup.wav',
+    'menu_select': 'select.wav',
+    'walk': 'walk.wav',
+    'shop_buy': 'buy.wav'
+}
+
+for name, file in sound_files.items():
+    load_sound(name, file)
+
+# Function to play sound safely
+def play_sound(name):
+    if name in sounds:
+        sounds[name].play()
+
+# Fonts
+font_large = pygame.font.SysFont('comicsansms', 48)
+font_medium = pygame.font.SysFont('comicsansms', 32)
+font_small = pygame.font.SysFont('comicsansms', 24)
+font_tiny = pygame.font.SysFont('comicsansms', 16)
+
+# Particle system for visual effects
+class Particle:
+    def __init__(self, x, y, color, size=5, lifetime=60):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.size = size
+        self.lifetime = lifetime
+        self.max_lifetime = lifetime
+        self.velocity_x = random.uniform(-2, 2)
+        self.velocity_y = random.uniform(-2, 2)
+        
+    def update(self):
+        self.x += self.velocity_x
+        self.y += self.velocity_y
+        self.size = max(0, self.size - 0.1)
+        self.lifetime -= 1
+        
+    def draw(self, camera_x, camera_y):
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+        alpha = int(255 * (self.lifetime / self.max_lifetime))
+        color = (*self.color[:3], alpha) if len(self.color) > 3 else self.color
+        
+        if 0 <= screen_x <= WIDTH and 0 <= screen_y <= HEIGHT:
+            pygame.draw.circle(screen, color, (int(screen_x), int(screen_y)), int(self.size))
+            
+    def is_dead(self):
+        return self.lifetime <= 0
+
+# Map generation
+class Tile:
+    def __init__(self, type, x, y, size):
+        self.type = type
+        self.x = x
+        self.y = y
+        self.size = size
+        # Random variation for decoration positioning
+        self.decoration_offset_x = random.randint(-size//4, size//4)
+        self.decoration_offset_y = random.randint(-size//4, size//4)
+        self.tree_height = random.randint(size, size*2)
+        self.rock_size = random.randint(size//3, size//2)
+        self.has_decoration = random.random() < 0.4  # 40% chance for decorations
+        # Animation parameters
+        self.wave_offset = random.random() * math.pi * 2
+        self.wave_speed = random.uniform(0.01, 0.03)
+        
+    def draw(self, camera_x, camera_y, time_passed):
+        # Only draw tiles that are visible on screen
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+        
+        if -self.size <= screen_x <= WIDTH and -self.size <= screen_y <= HEIGHT:
+            if self.type == "dirt":
+                pygame.draw.rect(screen, DIRT, (screen_x, screen_y, self.size, self.size))
+            elif self.type == "sand":
+                pygame.draw.rect(screen, SAND, (screen_x, screen_y, self.size, self.size))
+            elif self.type == "grass":
+                pygame.draw.rect(screen, GRASS, (screen_x, screen_y, self.size, self.size))
+            elif self.type == "forest":
+                pygame.draw.rect(screen, DARK_GREEN, (screen_x, screen_y, self.size, self.size))
+            elif self.type == "rock":
+                pygame.draw.rect(screen, ROCK, (screen_x, screen_y, self.size, self.size))
+            elif self.type == "path":
+                pygame.draw.rect(screen, LIGHT_SAND, (screen_x, screen_y, self.size, self.size))
+            elif self.type == "water":  # New water tile type
+                water_color = (65, 105, 225)
+                # Add wave animation
+                wave = math.sin(time_passed * self.wave_speed + self.wave_offset) * 10
+                water_rect = pygame.Rect(screen_x, screen_y, self.size, self.size)
+                pygame.draw.rect(screen, water_color, water_rect)
+                # Draw wave lines
+                for i in range(0, self.size, 4):
+                    wave_y = screen_y + i + math.sin(time_passed * 0.1 + i * 0.1) * 2
+                    pygame.draw.line(screen, (120, 160, 255), 
+                                    (screen_x, wave_y), 
+                                    (screen_x + self.size, wave_y), 1)
+            
+            # Draw decorations (trees and rocks)
+            if self.has_decoration:
+                deco_x = screen_x + self.size//2 + self.decoration_offset_x
+                deco_y = screen_y + self.size//2 + self.decoration_offset_y
+                
+                if self.type == "forest" and random.random() < 0.7:  # More trees in forest
+                    # Draw tree
+                    # Tree trunk
+                    trunk_width = self.size//5
+                    trunk_height = self.size//2
+                    pygame.draw.rect(screen, TREE_TRUNK, 
+                                    (deco_x - trunk_width//2, 
+                                     deco_y - trunk_height//2, 
+                                     trunk_width, trunk_height))
+                    
+                    # Tree foliage (triangular)
+                    tree_top = deco_y - trunk_height//2 - self.tree_height//2
+                    pygame.draw.polygon(screen, DARK_GREEN, [
+                        (deco_x, tree_top),  # Top point
+                        (deco_x - self.size//2, deco_y - trunk_height//2),  # Bottom left
+                        (deco_x + self.size//2, deco_y - trunk_height//2)   # Bottom right
+                    ])
+                
+                elif self.type == "rock" or (self.type in ["dirt", "grass", "sand"] and random.random() < 0.3):
+                    # Draw rock
+                    pygame.draw.circle(screen, ROCK, (deco_x, deco_y), self.rock_size)
+                    # Add some detail to the rock
+                    pygame.draw.circle(screen, (100, 100, 100), 
+                                     (deco_x - self.rock_size//3, deco_y - self.rock_size//3), 
+                                     self.rock_size//4)
+
+class Map:
+    def __init__(self, width, height, tile_size, difficulty=1):
+        self.width = width * 3
+        self.height = height * 3
+        self.tile_size = tile_size
+        self.tiles = []
+        self.difficulty = difficulty
+        self.generate_map()
+        
+    def generate_map(self):
+        self.tiles = []
+        num_tiles_x = self.width // self.tile_size
+        num_tiles_y = self.height // self.tile_size
+        
+        # Start with all dirt
+        for y in range(num_tiles_y):
+            for x in range(num_tiles_x):
+                self.tiles.append(Tile("dirt", x * self.tile_size, y * self.tile_size, self.tile_size))
+        
+        # Create multiple terrain regions
+        num_regions = random.randint(4 + self.difficulty, 6 + self.difficulty * 2)
+        region_centers = []
+        
+        for region in range(num_regions):
+            center_x = random.randint(num_tiles_x // 4, num_tiles_x * 3 // 4)
+            center_y = random.randint(num_tiles_y // 4, num_tiles_y * 3 // 4)
+            region_radius = min(num_tiles_x, num_tiles_y) // random.randint(3, 5)
+            region_centers.append((center_x, center_y))
+            
+            # Choose a biome type for this region
+            biome_type = random.choice(["grass", "forest", "sand"])
+            if self.difficulty >= 2 and random.random() < 0.3:
+                biome_type = "water"  # Add water regions in higher difficulties
+            
+            for i, tile in enumerate(self.tiles):
+                tile_x = i % num_tiles_x
+                tile_y = i // num_tiles_x
+                
+                # Distance from center
+                distance = math.sqrt((tile_x - center_x)**2 + (tile_y - center_y)**2)
+                
+                # Add some noise to make the terrain borders irregular
+                noise = random.uniform(-0.3, 0.3)
+                
+                if distance < region_radius * (0.9 + noise):
+                    # Core of the region
+                    if distance < region_radius * 0.6:
+                        if biome_type == "grass":
+                            if random.random() < 0.15:
+                                self.tiles[i].type = "forest"  # Some forest patches in grass
+                            else:
+                                self.tiles[i].type = "grass"
+                        elif biome_type == "forest":
+                            self.tiles[i].type = "forest"
+                            if random.random() < 0.1:
+                                self.tiles[i].type = "grass"  # Some grass clearings in forest
+                        elif biome_type == "sand":
+                            self.tiles[i].type = "sand"
+                        elif biome_type == "water":
+                            self.tiles[i].type = "water"
+                            
+                    # Edge of region blends with base terrain
+                    else:
+                        # Edges transition more naturally
+                        if random.random() < 0.5:
+                            self.tiles[i].type = biome_type
+                        else:
+                            self.tiles[i].type = "dirt"  # Base terrain
+                            
+                    # Add some rocky areas in all biomes
+                    if random.random() < 0.03 + (0.01 * self.difficulty):
+                        self.tiles[i].type = "rock"
+        
+        # Create paths between region centers
+        for i in range(len(region_centers)):
+            for j in range(i + 1, len(region_centers)):
+                if random.random() < 0.7:  # Don't connect all regions
+                    self.create_path(region_centers[i], region_centers[j], num_tiles_x, num_tiles_y)
+
+    def create_path(self, region1, region2, num_tiles_x, num_tiles_y):
+        x1, y1 = region1
+        x2, y2 = region2
+        
+        # Simple linear interpolation to create a path with some randomness
+        steps = int(max(abs(x2 - x1), abs(y2 - y1)) * 1.5)
+        
+        # Create a winding path
+        path_points = [(x1, y1)]
+        
+        # Add some intermediate points for a winding path
+        for _ in range(random.randint(1, 3)):
+            # Random point deviation
+            mid_x = (x1 + x2) // 2 + random.randint(-steps // 4, steps // 4)
+            mid_y = (y1 + y2) // 2 + random.randint(-steps // 4, steps // 4)
+            # Keep within map boundaries
+            mid_x = max(0, min(mid_x, num_tiles_x - 1))
+            mid_y = max(0, min(mid_y, num_tiles_y - 1))
+            path_points.append((mid_x, mid_y))
+        
+        path_points.append((x2, y2))
+        
+        # Draw path segments
+        for i in range(len(path_points) - 1):
+            x1, y1 = path_points[i]
+            x2, y2 = path_points[i + 1]
+            
+            segment_steps = max(abs(x2 - x1), abs(y2 - y1)) + 1
+            for step in range(segment_steps + 1):
+                x = int(x1 + (x2 - x1) * step / segment_steps)
+                y = int(y1 + (y2 - y1) * step / segment_steps)
+                
+                if 0 <= x < num_tiles_x and 0 <= y < num_tiles_y:
+                    index = y * num_tiles_x + x
+                    if index < len(self.tiles):
+                        self.tiles[index].type = "path"
+                        
+                        # Create a wider path by adding adjacent tiles
+                        for dx in [-1, 0, 1]:
+                            for dy in [-1, 0, 1]:
+                                nx, ny = x + dx, y + dy
+                                if 0 <= nx < num_tiles_x and 0 <= ny < num_tiles_y:
+                                    nindex = ny * num_tiles_x + nx
+                                    if nindex < len(self.tiles) and random.random() < 0.5:
+                                        self.tiles[nindex].type = "path"
+    
+    def get_valid_position(self, size, exclude_tiles=None, min_distance=None, reference_point=None):
+        if exclude_tiles is None:
+            exclude_tiles = ["rock", "water"]  # Exclude rocks and water
+            
+        valid_tiles = [tile for tile in self.tiles if tile.type not in exclude_tiles]
+        
+        if not valid_tiles:
+            return (self.width // 2, self.height // 2)
+        
+        # If we need to respect a minimum distance
+        if min_distance and reference_point:
+            ref_x, ref_y = reference_point
+            valid_tiles = [tile for tile in valid_tiles if 
+                          math.sqrt((tile.x + self.tile_size//2 - ref_x)**2 + 
+                                   (tile.y + self.tile_size//2 - ref_y)**2) > min_distance]
+        
+        # If no valid tiles with distance constraint, use any valid tile
+        if not valid_tiles and min_distance:
+            valid_tiles = [tile for tile in self.tiles if tile.type not in exclude_tiles]
+            
+        if not valid_tiles:  # Still no valid tiles
+            return (self.width // 2, self.height // 2)
+            
+        chosen_tile = random.choice(valid_tiles)
+        return (chosen_tile.x + self.tile_size // 2, chosen_tile.y + self.tile_size // 2)
+    
+    def draw(self, camera_x, camera_y, time_passed):
+        for tile in self.tiles:
+            tile.draw(camera_x, camera_y, time_passed)
+
+class PowerUp:
+    def __init__(self, x, y, type):
+        self.x = x
+        self.y = y
+        self.size = 15
+        self.type = type  # "speed", "health", "magnet", "shield"
+        self.collected = False
+        self.animation_offset = 0
+        self.colors = {
+            "speed": BLUE,
+            "health": RED,
+            "magnet": PURPLE,
+            "shield": GOLD
+        }
+        
+    def draw(self, camera_x, camera_y, time_passed):
+        if not self.collected:
+            screen_x = self.x - camera_x
+            screen_y = self.y - camera_y
+            
+            # Only draw if on screen
+            if -self.size*2 <= screen_x <= WIDTH + self.size*2 and -self.size*2 <= screen_y <= HEIGHT + self.size*2:
+                # Floating animation
+                float_offset = math.sin(time_passed * 0.005 + self.animation_offset) * 5
+                
+                # Draw power-up
+                color = self.colors.get(self.type, WHITE)
+                pygame.draw.circle(screen, color, (screen_x, screen_y + float_offset), self.size)
+                
+                # Draw icon based on type
+                if self.type == "speed":
+                    # Draw lightning bolt
+                    pygame.draw.polygon(screen, WHITE, [
+                        (screen_x, screen_y + float_offset - 7),
+                        (screen_x + 5, screen_y + float_offset),
+                        (screen_x, screen_y + float_offset + 3),
+                        (screen_x - 5, screen_y + float_offset)
+                    ])
+                elif self.type == "health":
+                    # Draw cross
+                    pygame.draw.rect(screen, WHITE, (screen_x - 2, screen_y + float_offset - 6, 4, 12))
+                    pygame.draw.rect(screen, WHITE, (screen_x - 6, screen_y + float_offset - 2, 12, 4))
+                elif self.type == "magnet":
+                    # Draw magnet
+                    pygame.draw.rect(screen, WHITE, (screen_x - 5, screen_y + float_offset - 5, 10, 3))
+                    pygame.draw.rect(screen, WHITE, (screen_x - 5, screen_y + float_offset - 5, 3, 10))
+                    pygame.draw.rect(screen, WHITE, (screen_x + 2, screen_y + float_offset - 5, 3, 10))
+                elif self.type == "shield":
+                    # Draw shield
+                    pygame.draw.arc(screen, WHITE, 
+                                  (screen_x - 6, screen_y + float_offset - 6, 12, 12),
+                                  math.pi/4, math.pi*7/4, 2)
+
+class Explorer:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.base_speed = 5
+        self.speed = self.base_speed
+        self.size = 20
+        self.treasures = 0
+        self.coins = 0
+        self.keys = 0
+        self.hearts = 3
+        self.max_hearts = 5
+        self.frame = 0
+        self.direction = "down"
+        self.moving = False
+        self.last_move_time = 0
+        self.animation_speed = 150  # milliseconds per frame
+        self.active_powerups = {
+            "speed": 0,
+            "magnet": 0,
+            "shield": 0
+        }
+        # Particles
+        self.particles = []
+        self.magnet_radius = 150  # Range for magnet power-up
+        self.name = "Explorer"
+        
+    def draw(self, camera_x, camera_y, time_passed):
+        # Calculate screen position
+        screen_x = self.x - camera_x
+        screen_y = self.y - camera_y
+        
+        # Update particles first
+        self.update_particles()
+        
+        # Draw particles behind player
+        for particle in self.particles:
+            particle.draw(camera_x, camera_y)
+        
+        # Draw shield if active
+        if self.active_powerups["shield"] > 0:
+            shield_radius = self.size + 10
+            shield_color = (255, 215, 0, min(200, int(255 * (self.active_powerups["shield"] / 600))))
+            shield_surface = pygame.Surface((shield_radius*2, shield_radius*2), pygame.SRCALPHA)
+            pygame.draw.circle(shield_surface, shield_color, (shield_radius, shield_radius), shield_radius)
+            screen.blit(shield_surface, (screen_x - shield_radius, screen_y - shield_radius))
+        
+        # Draw the explorer based on direction and animation frame
+        if self.direction == "down":
+            # Body
+            pygame.draw.circle(screen, BLUE, (screen_x, screen_y), self.size)
+            # Head
+            pygame.draw.circle(screen, (255, 213, 170), (screen_x, screen_y - self.size - 5), self.size // 2)
+            # Eyes
+            eye_offset = 2 if self.frame % 2 == 0 else 0
+            pygame.draw.circle(screen, BLACK, (screen_x - 5, screen_y - self.size - 5 - eye_offset), 3)
+            pygame.draw.circle(screen, BLACK, (screen_x + 5, screen_y - self.size - 5 - eye_offset), 3)
+            
+        elif self.direction == "up":
+            # Body
+            pygame.draw.circle(screen, BLUE, (screen_x, screen_y), self.size)
+            # Head (from behind)
+            pygame.draw.circle(screen, (200, 160, 120), (screen_x, screen_y - self.size - 5), self.size // 2)
+            # Hair
+            pygame.draw.ellipse(screen, (100, 50, 0), (screen_x - 8, screen_y - self.size - 10, 16, 10))
+            
+        elif self.direction == "left":
+            # Body
+            pygame.draw.circle(screen, BLUE, (screen_x, screen_y), self.size)
+            # Head
+            pygame.draw.circle(screen, (255, 213, 170), (screen_x - self.size // 2, screen_y - self.size // 2), self.size // 2)
+            # Eye (only one visible from side)
+            pygame.draw.circle(screen, BLACK, (screen_x - self.size // 2 - 3, screen_y - self.size // 2), 3)
+            
+        elif self.direction == "right":
+            # Body
+            pygame.draw.circle(screen, BLUE, (screen_x, screen_y), self.size)
+            # Head
+            pygame.draw.circle(screen, (255, 213, 170), (screen_x + self.size // 2, screen_y - self.size // 2), self.size // 2)
+            # Eye (only one visible from side)
+            pygame.draw.circle(screen, BLACK, (screen_x + self.size // 2 + 3, screen_y - self.size // 2), 3)
+        
+        # Draw name above player
+        name_text = font_tiny.render(self.name, True, WHITE)
+        screen.blit(name_text, (screen_x - name_text.get_width()//2, screen_y - self.size*2 - 20))
+        
+        # Draw active powerups
+        powerup_x = screen_x - 20
+        powerup_y = screen_y - self.size - 25
+        for powerup, time_left in self.active_powerups.items():
+            if time_left > 0:
+                if powerup == "speed":
+                    color = BLUE
+                elif powerup == "magnet":
+                    color = PURPLE
+                elif powerup == "shield":
+                    color = GOLD
+                else:
+                    color = WHITE
+                    
+                pygame.draw.circle(screen, color, (powerup_x, powerup_y), 5)
+                powerup_x += 15
+        
+        # Draw magnet radius if active
+        if self.active_powerups["magnet"] > 0:
+            pygame.draw.circle(screen, (PURPLE[0], PURPLE[1], PURPLE[2], 50), 
+                             (screen_x, screen_y), self.magnet_radius, 1)
+            
+    def update_particles(self):
+        # Remove dead particles
+        self.particles = [p for p in self.particles if not p.is_dead()]
+        
+        # Update remaining particles
+        for particle in self.particles:
+            particle.update()
+            
+        # Add new particles based on power-ups
+        if self.active_powerups["speed"] > 0 and random.random() < 0.2:
+            self.particles.append(Particle(
+                self.x + random.uniform(-self.size/2, self.size/2),
+                self.y + random.uniform(-self.size/2, self.size/2),
+                BLUE,
+                size=random.uniform(2, 4),
+                lifetime=random.randint(10, 20)
+            ))
+            
+    def apply_powerup(self, powerup_type):
+        if powerup_type == "speed":
+            self.active_powerups["speed"] = 600  # 10 seconds at 60 FPS
+            self.speed = self.base_speed * 1.5
+        elif powerup_type == "health":
+            self.hearts = min(self.hearts + 1, self.max_hearts)
+        elif powerup_type == "magnet":
+            self.active_powerups["magnet"] = 600  # 10 seconds
+        elif powerup_type == "shield":
+            self.active_powerups["shield"] = 600  # 10 seconds
+    
+    def update_powerups(self):
+        # Decrease timers for active powerups
+        for powerup in self.active_powerups:
+            if self.active_powerups[powerup] > 0:
+                self.active_powerups[powerup] -= 1
+                
+                # Reset effects when powerup expires
+                if self.active_powerups[powerup] <= 0:
+                    if powerup == "speed":
+                        self.speed = self.base_speed
+        
+    def move(self, keys, game_map, camera_x, camera_y, current_time):
+        new_x, new_y = self.x, self.y
+        self.moving = False
+        old_direction = self.direction
+        
+        if keys[pygame.K_LEFT] and self.x > self.size:
+            new_x -= self.speed
+            self.direction = "left"
+            self.moving = True
+        if keys[pygame.K_RIGHT] and self.x < game_map.width - self.size:
+            new_x += self.speed
+            self.direction = "right"
+            self.moving = True
+        if keys[pygame.K_UP] and self.y > self.size:
+            new_y -= self.speed
+            self.direction = "up"
+            self.moving = True
+        if keys[pygame.K_DOWN] and self.y < game_map.height - self.size:
+            new_y += self.speed
+            self.direction = "down"
+            self.moving = True
+            
+        # Update animation frame if moving
+        if self.moving:
+            if current_time - self.last_move_time > self.animation_speed:
+                self.frame = (self.frame + 1) % 4
+                self.last_move_time = current_time
+                # Play walk sound occasionally when frame changes
+                if self.frame == 0 and random.random() < 0.3:
+                    play_sound('walk')
+        else:
+            self.frame = 0
+            
+        # Check if new position is valid (not on rocks or water)
+        tile_x = new_x // game_map.tile_size
+        tile_y = new_y // game_map.tile_size
+        
+        if 0 <= tile_x < game_map.width // game_map.tile_size and 0 <= tile_y < game_map.height // game_map.tile_size:
+            tile_index = tile_y * (game_map.width // game_map.tile_size) + tile_x
+            
+            if 0 <= tile_index < len(game_map.tiles):
+                tile_type = game_map.tiles[tile_index].type
+                if tile_type not in ["rock", "water"] or (tile_type == "water" and self.active_powerups["shield"] > 0):
+                    self.x, self.y = new_x, new_y
+            
+    def collides_with(self, entity):
+        distance = math.sqrt((self.x - entity.x)**2 + (self.y - entity.y)**2)
+        return distance < self.size + entity.size
+    
+    def in_magnet_range(self, entity):
+        if self.active_powerups["magnet"] <= 0:
+            return False
